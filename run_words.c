@@ -44,6 +44,104 @@ char *mmap_null_terminated(int prot, int flags, int fd)
 // FIXME there is a better wat to do this.
 #define SWORD_SIZE "1000"
 
+int
+find_word_r (char *word1)
+{
+
+    entity *e = find_word (words, word1);
+
+    if (e)
+    {
+        printf ("found %s %s (%d)\n", e->name, word_type_str (e->type),e->type);
+        exit (0);
+    }
+
+    return (1);
+}
+
+int test_direct_link (char *word1, char *word2)
+{
+    int ret=1;
+
+    entity *w[2]={NULL,NULL};
+    if ((w[0]=find_word (words, word1)) == NULL)
+    {
+          fprintf(stderr,"Failed to find word \"%s\"\n",word1);
+          exit(2);
+    }
+    if ((w[1]=find_word (words, word2)) == NULL)
+    {
+        fprintf(stderr,"Failed to find word \"%s\"\n",word2);
+        exit(3);
+    }
+
+    if (is_link(w[0],w[1]) == WORDS_SUCCESS )
+    {
+        printf("Is a link\n");
+        ret=0;
+    }
+
+    return(ret);
+}
+
+
+int delete_link_r(char *word1, char *word2)
+{
+    entity *w[2]={NULL,NULL};
+    if ((w[0]=find_word (words, word1)) == NULL)
+    {
+        fprintf(stderr,"Failed to find word \"%s\"\n",word1);
+        return(0);
+    }
+    if ((w[1]=find_word (words, word2)) == NULL)
+    {
+        fprintf(stderr,"Failed to find word \"%s\"\n",word2);
+        return(0);
+    }
+
+    if (delete_link(w[0],w[1]) == WORDS_SUCCESS )
+        printf("The link between words %s and %s has been deleted \n",word1,word2);
+
+    return(1);
+}
+
+int classify_word(char *word1)
+{
+    int ret = 1;
+    entity *e=NULL;
+    if ((e=find_word (words, word1)) != NULL)
+    {
+           printf ("Found %s %s (%d)\n", e->name, word_type_str (e->type),e->type);
+           ret = 0;
+    }
+    else
+    {
+           printf ("Word not found %s\n",word1);
+    }
+    return(ret);
+}
+
+int find_connection(char *word1, char *word2)
+{
+    int ret=1;
+    struct chain chain;
+
+    chain.entity=NULL;
+
+
+    if ( word_search_r(words,64,word1,word2,&chain) == WORDS_SUCCESS )
+    {
+        fdump_chain_json(&chain,stdout);
+        printf("Found\n");
+        ret=0;
+    }
+    else
+    {
+        printf("Connection not found between %s and %s\n",word1,word2);
+    }
+    return(ret);
+}
+
 int scan_file(const WORDS wds, const char *file)
 {
     int found_count = 0;
@@ -470,14 +568,19 @@ int main (int argc, char **argv)
 
     if (daemon==1)
     {
-            system("clear");
+            fprintf (stderr, "\n=============================================================\n");
             fprintf (stderr, "'b iters' - Run Benchmark\n");
             fprintf (stderr, "'c num_lines words_file' - Create input file\n");
+            fprintf (stderr, "'e' word1 word1 - Delete the connection between words\n");
+            fprintf (stderr, "'f' word1 word2 - Find connection between words\n");
             fprintf (stderr, "'p' - Print Help\n");
+            fprintf (stderr, "'l' word1 word2 - Test direct link\n");
+            fprintf (stderr, "'m' word1 - find word1\n");
             fprintf (stderr, "'o file' - Output into format\n");
             fprintf (stderr, "'r file' - Read in a file\n");
             fprintf (stderr, "'s <1|2>' entity entity'  - Search for entity match\n");
             fprintf (stderr, "'t <file | dir>' Ingest file\n");
+            fprintf (stderr, "'w word - Classify word; What is this word ?\n");
             fprintf (stderr, "'x Exit\n");
             fprintf (stderr, "?\n");
 
@@ -495,17 +598,22 @@ int main (int argc, char **argv)
 
             if (strncmp(argv[1],"b",1) == 0) c='b'; else
             if (strncmp(argv[1],"c",1) == 0) c='c'; else
+            if (strncmp(argv[1],"e",1) == 0) c='e'; else
+            if (strncmp(argv[1],"f",1) == 0) c='f'; else
             if (strncmp(argv[1],"h",1) == 0) c='h'; else
             if (strncmp(argv[1],"o",1) == 0) c='o'; else
+            if (strncmp(argv[1],"l",1) == 0) c='l'; else
+            if (strncmp(argv[1],"m",1) == 0) c='m'; else
             if (strncmp(argv[1],"p",1) == 0) c='p'; else
             if (strncmp(argv[1],"r",1) == 0) c='r'; else
             if (strncmp(argv[1],"s",1) == 0) c='s'; else
             if (strncmp(argv[1],"t",1) == 0) c='t'; else
+            if (strncmp(argv[1],"w",1) == 0) c='w'; else
             if (strncmp(argv[1],"x",1) == 0) c='x'; else
                printf("Invalid option \n");
     }
 
-    if (daemon == 0) c = getopt (argc, argv, "bcdhorstx:");
+    if (daemon == 0) c = getopt (argc, argv, "bcdfhlmorstwx:");
 
     switch (c)
     {
@@ -555,18 +663,70 @@ int main (int argc, char **argv)
             daemon=1;
             break;
 
+        case 'e':
+            // Delete the link between words 
+            if (argc != 3)
+            {
+                fprintf (stderr, "Usage %s word1 word2 \n\n delete link between two words\n", argv[0]);
+            } else 
+                    delete_link_r(argv[2],argv[3]);
+
+            break;
+
+        case 'f':
+            // Find Connection 
+            if ( argc < 3 )
+            {
+                fprintf(stderr,"Usage: term1 term2 - Look for a connection between term1 and term2 \n");
+            }
+            else
+                find_connection(argv[2],argv[3]);
+
+            break;
+
         case 'h':
             //Print Help 
             fprintf (stderr, "Run Benchmark: Usage -b iters\n");
             fprintf (stderr, "Create input file: Usage -c num_lines words_file\n");
             fprintf (stderr, "Daemon Mode: Usage -d\n");
+            fprintf (stderr, "Delete link -e link\n");
+            fprintf (stderr, "Find connection between 2 words -f\n");
+            fprintf (stderr, "Test direct link between 2 words -l word1 word2\n");
             fprintf (stderr, "Print Help\n");
             fprintf (stderr, "Output into format: Usage -o file\n");
             fprintf (stderr, "Read in a file: Usage -r input_file\n");
             fprintf (stderr, "Search: Usage -s nth_order<1|2> entity1 entity2\n");
             fprintf (stderr, "Ingest Test file: Usage -t input_file | input_directory\n");
+            fprintf (stderr, "Classify a word: Usage -w word\n");
 
             if (daemon == 0) return(0);
+            break;
+
+        case 'l':
+            // Test Direct Link 
+            if (argc != 3)
+            {
+                fprintf (stderr, "Usage word1 word2 test link between two words. Return codes\n0 link\n1 no link\n2 failed to find first word\n3 failed to find second word\n4 other error\n");
+                return(4);
+            }
+
+            argv[3]=strtok(argv[3], "\n");  // Remove trailing CR
+
+            test_direct_link (argv[2],argv[3]);
+
+            if (daemon == 0) return(0);
+            break;
+
+        case 'm':
+            // Find word 
+    
+            if ( argc < 3 )
+            {
+                fprintf(stderr,"Usage: word1 - Find word1 \n");
+            }
+            else
+                find_word_r(argv[2]);
+
             break;
 
         case 'o':
@@ -639,6 +799,16 @@ int main (int argc, char **argv)
             if (daemon == 0) return(0);
             break;
 
+        case 'w':
+            if (argc < 2)
+            {
+               fprintf (stderr, "Usage  word... Attempt to classify word\n");
+            }
+            else
+               classify_word(argv[2]);
+
+            break;
+
         case 'x':
             return(0);
             break;
@@ -654,6 +824,7 @@ int main (int argc, char **argv)
                 fprintf (stderr, "Read in a file: Usage -r input_file\n");
                 fprintf (stderr, "Search: Usage -s nth_order<1|2> entity1 entity2\n");
                 fprintf (stderr, "Ingest Test file: Usage -t input_file | input_directory\n");
+                fprintf (stderr, "Classify a word: Usage -w word\n");
                 exit (1);
 
         default:
